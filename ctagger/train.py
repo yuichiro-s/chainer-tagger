@@ -28,20 +28,26 @@ def train(args):
 
     # create batches
     print >> sys.stderr, 'Creating batches...'
-    batches = util.create_batches(corpus, vocab_word, vocab_tag, args.batch, shuffle=not args.no_shuffle)
+    batches = util.create_batches(corpus, vocab_word, vocab_tag, args.batch, gpu=args.gpu, shuffle=not args.no_shuffle)
 
     # set up tagger
     tagger = nn.NnTagger(vocab_size=vocab_word.size(), emb_dim=emb_dim, window=args.window, hidden_dim=args.hidden,
                          tag_num=args.tag, init_emb=init_emb)
 
     # set up optimizer
-    optimizer = O.Adam()
+    optim_name = args.optim[0]
+    assert not args.decay_lr or optim_name == 'SGD', 'learning-rate decay is only supported for SGD'
+    optim_args = map(float, args.optim[1:])
+    optimizer = getattr(O, optim_name)(*optim_args)
     optimizer.setup(tagger.model)
+
+    initial_lr = None
+    if args.decay_lr:
+        initial_lr = optimizer.lr
 
     # set up GPU
     if args.gpu >= 0:
         tagger.model.to_gpu(args.gpu)
-        # TODO: move data to GPU
 
     # create directory
     os.makedirs(args.model)
@@ -50,6 +56,11 @@ def train(args):
 
     # training loop
     for n in range(args.epoch):
+        # decay learning rate
+        if args.decay_lr:
+            optimizer.lr = initial_lr / (n + 1)
+            print >> sys.stderr, 'Learning rate set to: {}'.format(optimizer.lr)
+
         for i, (x_data, t_data) in enumerate(batches):
             batch_size, length = x_data.shape
 
@@ -86,6 +97,8 @@ if __name__ == '__main__':
     parser.add_argument('--epoch', type=int, default=10, help='number of epochs to train')
     parser.add_argument('--init-emb', default=None, help='initial embedding file (word2vec output)')
     parser.add_argument('--init-emb-words', default=None, help='corresponding words of initial embedding file')
+    parser.add_argument('--optim', nargs='+', default=['SGD', '0.0075'], help='optimization method supported by chainer (optional arguments can be omitted)')
+    parser.add_argument('--decay-lr', action='store_true', default=False, help='divide learning rate of SGD by epoch number')
     parser.add_argument('--no-shuffle', action='store_true', default=False, help='don\'t shuffle training data')
     parser.add_argument('--gpu', type=int, default=-1, help='GPU ID (-1 to use CPU)')
 

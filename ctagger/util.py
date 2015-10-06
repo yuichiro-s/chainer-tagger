@@ -2,6 +2,7 @@ from collections import defaultdict
 import random
 
 import numpy as np
+from chainer import cuda
 
 
 EOS = u'<EOS>'
@@ -139,7 +140,7 @@ def split_into_batches(corpus, batch_size, length_func=lambda t: len(t[0])):
     return batches
 
 
-def create_batches(corpus, vocab_word, vocab_tag, batch_size, shuffle=False):
+def create_batches(corpus, vocab_word, vocab_tag, batch_size, gpu=-1, shuffle=False):
     # convert to IDs
     id_corpus = []
     for sen in corpus:
@@ -170,5 +171,9 @@ def create_batches(corpus, vocab_word, vocab_tag, batch_size, shuffle=False):
 
     # convert to numpy arrays
     batches = map(lambda batch: map(lambda arr: np.asarray(arr, dtype=np.int32), zip(*batch)), batches)
+
+    if gpu >= 0:
+        batches = map(lambda batch: map(lambda arr: cuda.to_gpu(arr, device=gpu), zip(*batch)), batches)
+
 
     return batches
