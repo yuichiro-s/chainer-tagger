@@ -1,4 +1,7 @@
 from collections import defaultdict
+import random
+
+import numpy as np
 
 
 EOS = u'<EOS>'
@@ -23,8 +26,8 @@ class Vocab(object):
         assert isinstance(word, unicode)
         return self.w2i.get(word)
 
-    def get_word(self, id):
-        return self.i2w[id]
+    def get_word(self, w_id):
+        return self.i2w[w_id]
 
     def size(self):
         return len(self.i2w)
@@ -79,3 +82,52 @@ def load_conll(path, file_encoding='utf-8'):
 
     return corpus, vocab_word, vocab_tag
 
+
+def split_into_batches(corpus, batch_size, length_func=lambda t: len(t[0])):
+    batches = []
+    batch = []
+    last_len = 0
+    for sen in corpus:
+        current_len = length_func(sen)
+        if (last_len != current_len and len(batch) > 0) or len(batch) == batch_size:
+            # next batch
+            batches.append(batch)
+            batch = []
+        last_len = current_len
+        batch.append(sen)
+    if batch:
+        batches.append(batch)
+    return batches
+
+
+def create_batches(corpus, vocab_word, vocab_tag, batch_size, vocab_size, shuffle=False):
+    # convert to IDs
+    id_corpus = []
+    for sen in corpus:
+        w_ids = []
+        t_ids = []
+        for w, t in sen:
+            w_id = vocab_word.get_id(w)
+            t_id = vocab_tag.get_id(t)
+            if w_id >= vocab_size:
+                w_id = vocab_word.get_id(UNK)
+            assert w_id is not None
+            assert t_id is not None
+            w_ids.append(w_id)
+            t_ids.append(t_id)
+        id_corpus.append((w_ids, t_ids))
+
+    # sort by lengths
+    id_corpus.sort(key=lambda w_t: len(w_t[0]))
+
+    # split into batches
+    batches = split_into_batches(id_corpus, batch_size)
+
+    # shuffle batches
+    if shuffle:
+        random.shuffle(batches)
+
+    # convert to numpy arrays
+    batches = map(lambda batch: map(lambda arr: np.asarray(arr, dtype=np.int32), zip(*batch)), batches)
+
+    return batches
