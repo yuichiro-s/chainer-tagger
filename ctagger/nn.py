@@ -53,7 +53,7 @@ class NnTagger(object):
         h_transpose = F.transpose(h, (0, 2, 1, 3))  # TODO: maybe inefficient
         h_reshape = F.reshape(h_transpose, (batch_size * length, self.hidden_dim))
 
-        y = F.relu(self.model.linear(h_reshape))
+        y = self.model.linear(F.relu(h_reshape))
         return y
 
     def forward_train(self, x_data, t_data):
