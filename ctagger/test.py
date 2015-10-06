@@ -37,11 +37,12 @@ def test(args):
             if t == pred_tag:
                 correct += 1
             total += 1
-        print >> sys.stderr, 'Processed {}/{} [{:.2%}]'.format(
-            processed_num, corpus_size, float(processed_num) / corpus_size)
+        print >> sys.stderr, 'Processed {:.2%} [{}/{}]'.format(
+            float(processed_num) / corpus_size,
+            processed_num, corpus_size)
 
     # report result
-    print '{:.2%}%'.format(float(processed_num, corpus_size))
+    print '{:.2%}'.format(float(correct) / total)
     print correct
     print total
 

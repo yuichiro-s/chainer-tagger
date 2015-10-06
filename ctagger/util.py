@@ -86,6 +86,42 @@ def load_conll(path, vocab_size=None, file_encoding='utf-8'):
     return corpus, vocab_word, vocab_tag
 
 
+def load_init_emb(init_emb, init_emb_words):
+    """Load embedding file and create vocabulary.
+
+    :return: tuple of embedding numpy array and vocabulary"""
+    dim = None
+    array = np.loadtxt(init_emb)
+
+    vocab = Vocab()
+    with open(init_emb_words) as f_words:
+        for i, line in enumerate(f_words):
+            word = line.strip().decode('utf-8')
+
+            # convert special characters
+            if word == u'PADDING':
+                word = EOS
+            elif word == u'UNKNOWN':
+                word = UNK
+            elif word == u'-lrb-':
+                word = u'('
+            elif word == u'-rrb-':
+                word = u')'
+            else:
+                # TODO: convert numbers appropriately
+                pass
+
+            vocab.add_word(word)
+
+    # load embeddings
+    emb = np.loadtxt(init_emb, dtype=np.float32)
+
+    assert vocab.get_id(EOS) is not None
+    assert vocab.get_id(UNK) is not None
+
+    return emb, vocab
+
+
 def split_into_batches(corpus, batch_size, length_func=lambda t: len(t[0])):
     batches = []
     batch = []

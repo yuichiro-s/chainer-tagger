@@ -1,1 +1,4 @@
 /data/
+*.egg-info/
+.cache/
+/model/

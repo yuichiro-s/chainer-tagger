@@ -2,12 +2,13 @@ import cPickle as pickle
 
 import chainer
 import chainer.functions as F
+import numpy as np
 
 
 class NnTagger(object):
     """Neural Network POS tagger."""
 
-    def __init__(self, vocab_size = 10000, emb_dim=100, window=5, hidden_dim=300, tag_num=45):
+    def __init__(self, vocab_size = 10000, emb_dim=100, window=5, hidden_dim=300, tag_num=45, init_emb=None):
         """
         :param emb_dim: dimension of word embeddings
         :param window: window size
@@ -30,6 +31,10 @@ class NnTagger(object):
                                  pad=(window / 2 * emb_dim, 0)),
             linear=F.Linear(hidden_dim, tag_num),
         )
+
+        # initialize embeddings
+        if init_emb is not None:
+            self.model.emb.W = init_emb
 
     def _forward(self, x_data, volatile):
         """
