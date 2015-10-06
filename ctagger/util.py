@@ -42,12 +42,12 @@ class Vocab(object):
         vocab = Vocab()
         with open(path) as f:
             for line in f:
-                w = line.split('\t')[1].decode('utf-8')
+                w = line.strip().split('\t')[1].decode('utf-8')
                 vocab.add_word(w)
         return vocab
 
 
-def load_conll(path, file_encoding='utf-8'):
+def load_conll(path, vocab_size=None, file_encoding='utf-8'):
     """Load CoNLL-format file.
     :return triple of corpus (pairs of words and tags), word vocabulary, tag vocabulary"""
 
@@ -64,7 +64,7 @@ def load_conll(path, file_encoding='utf-8'):
         for line in f:
             es = line.rstrip().split('\t')
             if len(es) == 10:
-                word = es[1].decode(file_encoding)
+                word = es[1].decode(file_encoding).lower()
                 tag = es[4].decode(file_encoding)
                 vocab_tag.add_word(tag)
                 wt = (word, tag)
@@ -77,8 +77,11 @@ def load_conll(path, file_encoding='utf-8'):
         if wts:
             corpus.append(wts)
 
-    for w, _ in sorted(word_freqs.items(), key=lambda (k, v): -v):
-        vocab_word.add_word(w)
+    for w, f in sorted(word_freqs.items(), key=lambda (k, v): -v):
+        if vocab_size is not None and vocab_word.size() < vocab_size:
+            vocab_word.add_word(w)
+        else:
+            break
 
     return corpus, vocab_word, vocab_tag
 
@@ -100,7 +103,7 @@ def split_into_batches(corpus, batch_size, length_func=lambda t: len(t[0])):
     return batches
 
 
-def create_batches(corpus, vocab_word, vocab_tag, batch_size, vocab_size, shuffle=False):
+def create_batches(corpus, vocab_word, vocab_tag, batch_size, shuffle=False):
     # convert to IDs
     id_corpus = []
     for sen in corpus:
@@ -109,10 +112,12 @@ def create_batches(corpus, vocab_word, vocab_tag, batch_size, vocab_size, shuffl
         for w, t in sen:
             w_id = vocab_word.get_id(w)
             t_id = vocab_tag.get_id(t)
-            if w_id >= vocab_size:
+            if w_id is None:
                 w_id = vocab_word.get_id(UNK)
             assert w_id is not None
-            assert t_id is not None
+            if t_id is None:
+                # ID for unknown tag
+                t_id = -1
             w_ids.append(w_id)
             t_ids.append(t_id)
         id_corpus.append((w_ids, t_ids))

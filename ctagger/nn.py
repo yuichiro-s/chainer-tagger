@@ -78,6 +78,6 @@ class NnTagger(object):
 
     @classmethod
     def load(cls, path):
-        with open(path) as f:
+        with open(path, 'rb') as f:
             return pickle.load(f)
 
