@@ -64,8 +64,7 @@ class NnTagger(object):
     def forward_test(self, x_data):
         y = self._forward(x_data, volatile=True)
         batch_size, length = x_data.shape
-        pred = F.softmax(y)
-        t = F.reshape(pred, (batch_size, length, self.tag_num))
+        t = F.reshape(y, (batch_size, length, self.tag_num))
         return t
 
     def save(self, path):
