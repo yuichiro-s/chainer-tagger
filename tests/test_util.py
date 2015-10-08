@@ -1,6 +1,6 @@
 import numpy as np
 
-from ctagger.train import *
+from ctagger.util import *
 
 
 def test_split_into_batches():
