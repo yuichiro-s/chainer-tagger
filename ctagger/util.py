@@ -173,7 +173,7 @@ def create_batches(corpus, vocab_word, vocab_tag, batch_size, gpu=-1, shuffle=Fa
     batches = map(lambda batch: map(lambda arr: np.asarray(arr, dtype=np.int32), zip(*batch)), batches)
 
     if gpu >= 0:
-        batches = map(lambda batch: map(lambda arr: cuda.to_gpu(arr, device=gpu), zip(*batch)), batches)
+        batches = map(lambda batch: map(lambda arr: cuda.to_gpu(arr, device=gpu), batch), batches)
 
 
     return batches

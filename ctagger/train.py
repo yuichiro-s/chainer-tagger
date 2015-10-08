@@ -8,6 +8,12 @@ import chainer.optimizers as O
 
 
 def train(args):
+    # set up optimizer
+    optim_name = args.optim[0]
+    assert not args.decay_lr or optim_name == 'SGD', 'learning-rate decay is only supported for SGD'
+    optim_args = map(float, args.optim[1:])
+    optimizer = getattr(O, optim_name)(*optim_args)
+
     # load pre-trained embeddings
     vocab_word = None
     init_emb = None
@@ -32,13 +38,6 @@ def train(args):
     tagger = nn.NnTagger(vocab_size=vocab_word.size(), emb_dim=emb_dim, window=args.window, hidden_dim=args.hidden,
                          tag_num=args.tag, init_emb=init_emb)
 
-    # set up optimizer
-    optim_name = args.optim[0]
-    assert not args.decay_lr or optim_name == 'SGD', 'learning-rate decay is only supported for SGD'
-    optim_args = map(float, args.optim[1:])
-    optimizer = getattr(O, optim_name)(*optim_args)
-    optimizer.setup(tagger.model)
-
     initial_lr = None
     if args.decay_lr:
         initial_lr = optimizer.lr
@@ -46,6 +45,8 @@ def train(args):
     # set up GPU
     if args.gpu >= 0:
         tagger.model.to_gpu(args.gpu)
+
+    optimizer.setup(tagger.model)
 
     # create directory
     os.makedirs(args.model)
