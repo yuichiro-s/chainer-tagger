@@ -26,9 +26,9 @@ class NnTagger(object):
         self.model = chainer.FunctionSet(
             emb=F.EmbedID(vocab_size, emb_dim),
             conv=F.Convolution2D(1, hidden_dim,
-                                 ksize=(emb_dim * window, 1),
-                                 stride=(emb_dim, 1),
-                                 pad=(window / 2 * emb_dim, 0)),
+                                 ksize=(window, emb_dim),
+                                 stride=(1, emb_dim),
+                                 pad=(window/2, 0)),
             linear=F.Linear(hidden_dim, tag_num),
         )
 
@@ -44,28 +44,27 @@ class NnTagger(object):
         :param t_data: target data
         :return: variable of size (batch * sentence length, number of tags)
         """
-        batch_size, length = x_data.shape
-        x = chainer.Variable(x_data.flatten(), volatile=volatile)
+        batch_size = x_data.shape[0]
+        x = chainer.Variable(x_data, volatile=volatile)
         emb = self.model.emb(x)
-        emb_reshape = F.reshape(emb, (batch_size, 1, self.emb_dim * length, 1))
+        emb_reshape = F.reshape(emb, (1, 1, batch_size, self.emb_dim))
 
         h = self.model.conv(emb_reshape)
-        h_transpose = F.transpose(h, (0, 2, 1, 3))  # TODO: maybe inefficient
-        h_reshape = F.reshape(h_transpose, (batch_size * length, self.hidden_dim))
+        h_transpose = F.swapaxes(h, 1, 2)  # TODO: maybe inefficient
+        h_reshape = F.reshape(h_transpose, (batch_size, self.hidden_dim))
 
         y = self.model.linear(F.relu(h_reshape))
         return y
 
     def forward_train(self, x_data, t_data):
         y = self._forward(x_data, volatile=False)
-        t = chainer.Variable(t_data.flatten())
+        t = chainer.Variable(t_data)
+        # TODO: Currently, tags of paddings are also predicted. They must be excluded from the loss.
         return F.softmax_cross_entropy(y, t), F.accuracy(y, t)
 
     def forward_test(self, x_data):
         y = self._forward(x_data, volatile=True)
-        batch_size, length = x_data.shape
-        t = F.reshape(y, (batch_size, length, self.tag_num))
-        return t
+        return y
 
     def save(self, path):
         with open(path, 'wb') as f:

@@ -145,24 +145,7 @@ def load_init_emb(init_emb, init_emb_words, vocab):
     return emb
 
 
-def split_into_batches(corpus, batch_size, length_func=lambda t: len(t[0])):
-    batches = []
-    batch = []
-    last_len = 0
-    for sen in corpus:
-        current_len = length_func(sen)
-        if (last_len != current_len and len(batch) > 0) or len(batch) == batch_size:
-            # next batch
-            batches.append(batch)
-            batch = []
-        last_len = current_len
-        batch.append(sen)
-    if batch:
-        batches.append(batch)
-    return batches
-
-
-def create_batches(corpus, vocab_word, vocab_tag, batch_size, gpu=-1, shuffle=False):
+def create_batches(corpus, vocab_word, vocab_tag, batch_size, window, gpu=-1, shuffle=False):
     # convert to IDs
     id_corpus = []
     for sen in corpus:
@@ -181,18 +164,31 @@ def create_batches(corpus, vocab_word, vocab_tag, batch_size, gpu=-1, shuffle=Fa
             t_ids.append(t_id)
         id_corpus.append((w_ids, t_ids))
 
-    # sort by lengths
-    id_corpus.sort(key=lambda w_t: len(w_t[0]))
-
-    # split into batches
-    batches = split_into_batches(id_corpus, batch_size)
-
     # shuffle batches
     if shuffle:
-        random.shuffle(batches)
+        random.shuffle(id_corpus)
+
+    # split into batches
+    assert window % 2 == 1      # window size must be odd
+    padding_num = window / 2
+    padding = [0] * padding_num
+    batch_num = (len(id_corpus) - 1) / batch_size + 1
+    batches = []
+    for i in range(batch_num):
+        batch_w = []
+        batch_t = []
+        for i, (w_ids, t_ids) in enumerate(id_corpus[batch_size*i:batch_size*(i+1)]):
+            if i > 0:
+                # padding
+                batch_w.extend(padding)
+                batch_t.extend(padding)
+            batch_w.extend(w_ids)
+            batch_t.extend(t_ids)
+        batch = (batch_w, batch_t)
+        batches.append(batch)
 
     # convert to numpy arrays
-    batches = map(lambda batch: map(lambda arr: np.asarray(arr, dtype=np.int32), zip(*batch)), batches)
+    batches = map(lambda batch: map(lambda arr: np.asarray(arr, dtype=np.int32), batch), batches)
 
     if gpu >= 0:
         batches = map(lambda batch: map(lambda arr: cuda.to_gpu(arr, device=gpu), batch), batches)
