@@ -91,9 +91,6 @@ def load_init_emb(init_emb, init_emb_words):
     """Load embedding file and create vocabulary.
 
     :return: tuple of embedding numpy array and vocabulary"""
-    dim = None
-    array = np.loadtxt(init_emb)
-
     vocab = Vocab()
     with open(init_emb_words) as f_words:
         for i, line in enumerate(f_words):
@@ -174,6 +171,5 @@ def create_batches(corpus, vocab_word, vocab_tag, batch_size, gpu=-1, shuffle=Fa
 
     if gpu >= 0:
         batches = map(lambda batch: map(lambda arr: cuda.to_gpu(arr, device=gpu), batch), batches)
-
 
     return batches
