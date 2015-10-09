@@ -20,26 +20,26 @@ def test(args):
 
     print >> sys.stderr, 'Loading data...'
     corpus = util.load_conll(args.data, 0)[0]
-    corpus_size = len(corpus)
 
     print >> sys.stderr, 'Creating batches...'
-    batches = util.create_batches(corpus, vocab_word, vocab_tag, batch_size=128)
+    batches = util.create_batches(corpus, vocab_word, vocab_tag, batch_size=128, window=tagger.window)
+    batch_num = len(batches)
 
     # main loop
     total = 0
     correct = 0
     processed_num = 0
     for i, (x_data, t_data) in enumerate(batches):
-        processed_num += x_data.shape[0]
+        processed_num += 1
         pred = tagger.forward_test(x_data)
-        predicted_tags = np.argmax(pred.data, axis=2)
-        for t, pred_tag in zip(t_data.flatten(), predicted_tags.flatten()):
+        predicted_tags = np.argmax(pred.data, axis=1)
+        for t, pred_tag in zip(t_data, predicted_tags):
             if t == pred_tag:
                 correct += 1
             total += 1
         print >> sys.stderr, 'Processed {:.2%} [{}/{}]'.format(
-            float(processed_num) / corpus_size,
-            processed_num, corpus_size)
+            float(processed_num) / batch_num,
+            processed_num, batch_num)
 
     # report result
     print '{:.2%}'.format(float(correct) / total)

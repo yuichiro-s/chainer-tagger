@@ -30,7 +30,7 @@ def train(args):
 
     # create batches
     print >> sys.stderr, 'Creating batches...'
-    batches = util.create_batches(corpus, vocab_word, vocab_tag, args.batch, gpu=args.gpu, shuffle=not args.no_shuffle)
+    batches = util.create_batches(corpus, vocab_word, vocab_tag, args.batch, args.window, gpu=args.gpu, shuffle=not args.no_shuffle)
 
     # set up tagger
     tagger = nn.NnTagger(vocab_size=vocab_word.size(), emb_dim=emb_dim, window=args.window, hidden_dim=args.hidden,
@@ -59,15 +59,15 @@ def train(args):
             print >> sys.stderr, 'Learning rate set to: {}'.format(optimizer.lr)
 
         for i, (x_data, t_data) in enumerate(batches):
-            batch_size, length = x_data.shape
+            batch_size = x_data.shape[0]
 
             optimizer.zero_grads()
             loss, acc = tagger.forward_train(x_data, t_data)
             loss.backward()
             optimizer.update()
 
-            print >> sys.stderr, 'Epoch {}\tBatch {}\tloss:\t{}\tacc:\t{}\tsize:\t{}\tlen:\t{}'.format(
-                n + 1, i + 1, loss.data, acc.data, batch_size, length)
+            print >> sys.stderr, 'Epoch {}\tBatch {}\tloss:\t{}\tacc:\t{}\tsize:\t{}'.format(
+                n + 1, i + 1, loss.data, acc.data, batch_size)
 
         # save current model
         dest_path = os.path.join(args.model, 'epoch' + str(n + 1))
