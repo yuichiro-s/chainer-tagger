@@ -87,11 +87,25 @@ def load_conll(path, vocab_size=None, file_encoding='utf-8'):
     return corpus, vocab_word, vocab_tag
 
 
-def load_init_emb(init_emb, init_emb_words):
+def load_init_emb(init_emb, init_emb_words, vocab):
     """Load embedding file and create vocabulary.
 
     :return: tuple of embedding numpy array and vocabulary"""
-    vocab = Vocab()
+
+    unk_id = vocab.get_id(UNK)
+
+    # read first line and get dimension
+    with open(init_emb) as f_emb:
+        line = f_emb.readline()
+        dim = len(line.split())
+    assert dim > 0
+
+    # initialize embeddings
+    emb = np.random.randn(vocab.size(), dim).astype(np.float32)
+
+    # corresponding IDs in given vocabulary
+    ids = []
+
     with open(init_emb_words) as f_words:
         for i, line in enumerate(f_words):
             word = line.strip().decode('utf-8')
@@ -109,15 +123,26 @@ def load_init_emb(init_emb, init_emb_words):
                 # TODO: convert numbers appropriately
                 pass
 
-            vocab.add_word(word)
+            w_id = vocab.get_id(word)
 
-    # load embeddings
-    emb = np.loadtxt(init_emb, dtype=np.float32)
+            # don't map unknown words to <UNK> unless it's really UNKNOWN
+            if w_id == unk_id:
+                if word == UNK:
+                    ids.append(unk_id)
+                else:
+                    # no corresponding word in vocabulary
+                    ids.append(None)
+            else:
+                ids.append(w_id)
 
-    assert vocab.get_id(EOS) is not None
-    assert vocab.get_id(UNK) is not None
 
-    return emb, vocab
+    with open(init_emb) as f_emb:
+        for i, emb_str in enumerate(f_emb):
+            w_id = ids[i]
+            if w_id is not None:
+                emb[w_id] = emb_str.split()
+
+    return emb
 
 
 def split_into_batches(corpus, batch_size, length_func=lambda t: len(t[0])):

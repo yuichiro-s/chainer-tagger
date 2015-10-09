@@ -14,21 +14,19 @@ def train(args):
     optim_args = map(float, args.optim[1:])
     optimizer = getattr(O, optim_name)(*optim_args)
 
+    # load data
+    print >> sys.stderr, 'Loading data...'
+    corpus, vocab_word, vocab_tag = util.load_conll(args.data, args.vocab)
+
     # load pre-trained embeddings
-    vocab_word = None
     init_emb = None
     if args.init_emb:
         print >> sys.stderr, 'Loading embeddings...'
         assert args.init_emb_words
-        init_emb, vocab_word = util.load_init_emb(args.init_emb, args.init_emb_words)
+        init_emb = util.load_init_emb(args.init_emb, args.init_emb_words, vocab_word)
         emb_dim = init_emb.shape[1]
     else:
         emb_dim = args.emb
-
-    print >> sys.stderr, 'Loading data...'
-    corpus, vocab_word_tmp, vocab_tag = util.load_conll(args.data, args.vocab)
-    if vocab_word is None:
-        vocab_word = vocab_word_tmp
 
     # create batches
     print >> sys.stderr, 'Creating batches...'
