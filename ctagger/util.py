@@ -1,5 +1,6 @@
 from collections import defaultdict
 import random
+import re
 
 import numpy as np
 from chainer import cuda
@@ -7,6 +8,8 @@ from chainer import cuda
 
 EOS = u'<EOS>'
 UNK = u'<UNK>'
+
+RE_NUM = re.compile(ur'[0-9]')
 
 
 class Vocab(object):
@@ -50,27 +53,36 @@ class Vocab(object):
 
 def load_conll(path, vocab_size=None, file_encoding='utf-8'):
     """Load CoNLL-format file.
-    :return triple of corpus (pairs of words and tags), word vocabulary, tag vocabulary"""
+    :return tuple of corpus (pairs of words and tags), word vocabulary, char vocabulary, tag vocabulary"""
 
     corpus = []
     word_freqs = defaultdict(int)
+    char_freqs = defaultdict(int)
 
     vocab_word = Vocab()
+    vocab_char = Vocab()
     vocab_tag = Vocab()
     vocab_word.add_word(EOS)
     vocab_word.add_word(UNK)
+    vocab_char.add_word(EOS)
+    vocab_char.add_word(UNK)
 
     with open(path) as f:
         wts = []
         for line in f:
             es = line.rstrip().split('\t')
             if len(es) == 10:
-                word = es[1].decode(file_encoding).lower()
+                word = es[1].decode(file_encoding)
+                # replace numbers with 0
+                word = RE_NUM.sub(u'0', word)
                 tag = es[4].decode(file_encoding)
-                vocab_tag.add_word(tag)
+                for c in word:
+                    char_freqs[c] += 1
+                word = word.lower()     # lowercase words
                 wt = (word, tag)
                 wts.append(wt)
                 word_freqs[word] += 1
+                vocab_tag.add_word(tag)
             else:
                 # reached end of sentence
                 corpus.append(wts)
@@ -84,7 +96,10 @@ def load_conll(path, vocab_size=None, file_encoding='utf-8'):
         else:
             break
 
-    return corpus, vocab_word, vocab_tag
+    for c, f in sorted(char_freqs.items(), key=lambda (k, v): -v):
+        vocab_char.add_word(c)
+
+    return corpus, vocab_word, vocab_char, vocab_tag
 
 
 def load_init_emb(init_emb, init_emb_words, vocab):
@@ -135,7 +150,6 @@ def load_init_emb(init_emb, init_emb_words, vocab):
             else:
                 ids.append(w_id)
 
-
     with open(init_emb) as f_emb:
         for i, emb_str in enumerate(f_emb):
             w_id = ids[i]
@@ -145,12 +159,33 @@ def load_init_emb(init_emb, init_emb_words, vocab):
     return emb
 
 
-def create_batches(corpus, vocab_word, vocab_tag, batch_size, window, gpu=-1, shuffle=False):
+def split_into_batches(corpus, batch_size, length_func=lambda t: len(t[0])):
+    batches = []
+    batch = []
+    last_len = 0
+    for sen in corpus:
+        current_len = length_func(sen)
+        if (last_len != current_len and len(batch) > 0) or len(batch) == batch_size:
+            # next batch
+            batches.append(batch)
+            batch = []
+        last_len = current_len
+        batch.append(sen)
+    if batch:
+        batches.append(batch)
+    return batches
+
+
+def create_batches(corpus, vocab_word, vocab_char, vocab_tag, batch_size, word_window, char_window, gpu, shuffle):
+    char_padding_size = char_window / 2
+    char_padding = [vocab_char.get_id(EOS)] * char_padding_size
+
     # convert to IDs
     id_corpus = []
     for sen in corpus:
         w_ids = []
         t_ids = []
+        c_ids = []
         for w, t in sen:
             w_id = vocab_word.get_id(w)
             t_id = vocab_tag.get_id(t)
@@ -162,35 +197,48 @@ def create_batches(corpus, vocab_word, vocab_tag, batch_size, window, gpu=-1, sh
                 t_id = -1
             w_ids.append(w_id)
             t_ids.append(t_id)
-        id_corpus.append((w_ids, t_ids))
+            c_ids.append([vocab_char.get_id(c) for c in w])
+        id_corpus.append((w_ids, t_ids, c_ids))
+
+    # sort by lengths
+    id_corpus.sort(key=lambda w_t: len(w_t[0]))
+
+    # split into batches
+    word_batches = split_into_batches(id_corpus, batch_size)
 
     # shuffle batches
     if shuffle:
-        random.shuffle(id_corpus)
+        random.shuffle(word_batches)
 
-    # split into batches
-    assert window % 2 == 1      # window size must be odd
-    padding_num = window / 2
-    padding = [0] * padding_num
-    batch_num = (len(id_corpus) - 1) / batch_size + 1
+    # character IDs
     batches = []
-    for i in range(batch_num):
-        batch_w = []
-        batch_t = []
-        for i, (w_ids, t_ids) in enumerate(id_corpus[batch_size*i:batch_size*(i+1)]):
-            if i > 0:
-                # padding
-                batch_w.extend(padding)
-                batch_t.extend(padding)
-            batch_w.extend(w_ids)
-            batch_t.extend(t_ids)
-        batch = (batch_w, batch_t)
-        batches.append(batch)
+    for word_batch in word_batches:
+        word_ids, tag_ids, char_ids = zip(*word_batch)
 
-    # convert to numpy arrays
-    batches = map(lambda batch: map(lambda arr: np.asarray(arr, dtype=np.int32), batch), batches)
+        char_boundaries = []
+        char_batch = []
+        i = 0
+        char_batch.extend(char_padding)
 
-    if gpu >= 0:
-        batches = map(lambda batch: map(lambda arr: cuda.to_gpu(arr, device=gpu), batch), batches)
+        for word_id_list, char_id_lists in zip(word_ids, char_ids):
+            for w_id, c_ids in zip(word_id_list, char_id_lists):
+                char_batch.extend(c_ids)
+                char_batch.extend(char_padding)
+                i += char_padding_size
+                char_boundaries.append(i)
+                i += len(c_ids)
+                char_boundaries.append(i)
+
+        word_ids_data = np.asarray(word_ids, dtype=np.int32)
+        char_ids_data = np.asarray(char_batch, dtype=np.int32)
+        tag_ids_data = np.asarray(tag_ids, dtype=np.int32).flatten()
+
+        if gpu is not None:
+            word_ids_data = cuda.to_gpu(word_ids_data)
+            char_ids_data = cuda.to_gpu(char_ids_data)
+            tag_ids_data = cuda.to_gpu(tag_ids_data)
+
+        batches.append(((word_ids_data, (char_ids_data, char_boundaries)), tag_ids_data))
 
     return batches
+
